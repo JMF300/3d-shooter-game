@@ -1,92 +1,113 @@
-// main.js
-const canvas = document.getElementById("renderCanvas");
-const engine = new BABYLON.Engine(canvas, true);
+import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
+import { PointerLockControls } from 'https://cdn.skypack.dev/three/examples/jsm/controls/PointerLockControls.js';
 
-const scene = new BABYLON.Scene(engine);
-scene.clearColor = new BABYLON.Color3(0.15, 0.15, 0.3);
+let camera, scene, renderer, controls, gun, flash, score = 0;
+const bullets = [];
+const targets = [];
 
-const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 1.5, -5), scene);
-camera.attachControl(canvas, true);
-camera.inertia = 0.1;
-camera.speed = 0.3;
-camera.angularSensibility = 500;
+init();
+animate();
 
-camera.keysUp.push(87);    // W
-camera.keysDown.push(83);  // S
-camera.keysLeft.push(65);  // A
-camera.keysRight.push(68); // D
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x222244);
 
-const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-light.intensity = 0.7;
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.y = 2;
 
-const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 20, height: 20 }, scene);
+    renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-// Gun model
-const gunMaterial = new BABYLON.StandardMaterial("gunMat", scene);
-gunMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+    controls = new PointerLockControls(camera, document.body);
+    document.body.addEventListener('click', () => controls.lock());
+    scene.add(controls.getObject());
 
-const gunBody = BABYLON.MeshBuilder.CreateBox("gunBody", { height: 0.15, width: 0.3, depth: 0.6 }, scene);
-const gunHandle = BABYLON.MeshBuilder.CreateBox("gunHandle", { height: 0.2, width: 0.1, depth: 0.15 }, scene);
-gunHandle.position.y = -0.175;
-gunHandle.position.z = -0.1;
-const gunBarrel = BABYLON.MeshBuilder.CreateCylinder("gunBarrel", { height: 0.4, diameter: 0.05 }, scene);
-gunBarrel.rotation.x = Math.PI / 2;
-gunBarrel.position.z = 0.4;
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(10, 10, 10).normalize();
+    scene.add(light);
 
-const gun = BABYLON.Mesh.MergeMeshes([gunBody, gunHandle, gunBarrel], true, false, null, false, true);
-gun.material = gunMaterial;
-gun.parent = camera;
-gun.position = new BABYLON.Vector3(0.3, -0.3, 1);
+    const floorGeometry = new THREE.PlaneGeometry(200, 200);
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
 
-// Muzzle flash
-const muzzleFlash = new BABYLON.PointLight("muzzleFlash", new BABYLON.Vector3(0, 0, 0), scene);
-muzzleFlash.diffuse = new BABYLON.Color3(1, 0.8, 0.4);
-muzzleFlash.intensity = 0;
-muzzleFlash.range = 5;
-muzzleFlash.parent = gun;
-muzzleFlash.position = new BABYLON.Vector3(0, 0, 0.4);
+    const gunGeometry = new THREE.BoxGeometry(0.2, 0.2, 1);
+    const gunMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    gun = new THREE.Mesh(gunGeometry, gunMaterial);
+    gun.position.set(0.5, -0.5, -1);
+    camera.add(gun);
 
-function triggerMuzzleFlash() {
-  muzzleFlash.intensity = 3;
-  setTimeout(() => { muzzleFlash.intensity = 0; }, 50);
+    const flashGeo = new THREE.SphereGeometry(0.1, 8, 8);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.visible = false;
+    flash.position.set(0, 0, -1.5);
+    camera.add(flash);
+
+    for (let i = 0; i < 10; i++) {
+        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const boxMat = new THREE.MeshStandardMaterial({ color: 0xaa0000 });
+        const box = new THREE.Mesh(boxGeo, boxMat);
+        box.position.set(Math.random() * 40 - 20, 0.5, Math.random() * 40 - 20);
+        scene.add(box);
+        targets.push(box);
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('mousedown', onShoot);
 }
 
-// Enemies
-const enemies = [];
-function createEnemy(position) {
-  const enemy = BABYLON.MeshBuilder.CreateBox("enemy", { size: 0.8 }, scene);
-  enemy.position = position;
-  const enemyMat = new BABYLON.StandardMaterial("enemyMat", scene);
-  enemyMat.diffuseColor = new BABYLON.Color3(1, 0, 0);
-  enemy.material = enemyMat;
-  enemies.push(enemy);
+const move = { forward: false, left: false, backward: false, right: false };
+function onKeyDown(e) {
+    if (e.code === 'KeyW') move.forward = true;
+    if (e.code === 'KeyA') move.left = true;
+    if (e.code === 'KeyS') move.backward = true;
+    if (e.code === 'KeyD') move.right = true;
 }
-createEnemy(new BABYLON.Vector3(0, 0.4, 5));
-createEnemy(new BABYLON.Vector3(-2, 0.4, 8));
-createEnemy(new BABYLON.Vector3(3, 0.4, 10));
-
-// Shooting
-window.addEventListener("mousedown", (event) => {
-  if (event.button === 0) {
-    shoot();
-  }
-});
-
-function shoot() {
-  triggerMuzzleFlash();
-  const origin = camera.position;
-  const forward = camera.getForwardRay().direction;
-  const ray = new BABYLON.Ray(origin, forward, 100);
-
-  const hit = scene.pickWithRay(ray, (mesh) => enemies.includes(mesh));
-
-  if (hit.pickedMesh) {
-    hit.pickedMesh.dispose();
-    console.log("Enemy hit!");
-  } else {
-    console.log("Missed");
-  }
+function onKeyUp(e) {
+    if (e.code === 'KeyW') move.forward = false;
+    if (e.code === 'KeyA') move.left = false;
+    if (e.code === 'KeyS') move.backward = false;
+    if (e.code === 'KeyD') move.right = false;
 }
 
-engine.runRenderLoop(() => scene.render());
-window.addEventListener("resize", () => engine.resize());
+function onShoot() {
+    flash.visible = true;
+    setTimeout(() => flash.visible = false, 50);
+
+    const raycaster = new THREE.Raycaster(camera.position, camera.getWorldDirection(new THREE.Vector3()));
+    const intersects = raycaster.intersectObjects(targets);
+    if (intersects.length > 0) {
+        const target = intersects[0].object;
+        scene.remove(target);
+        targets.splice(targets.indexOf(target), 1);
+        score++;
+        document.getElementById('score').textContent = 'Score: ' + score;
+    }
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    const speed = 0.1;
+    const direction = new THREE.Vector3();
+    if (move.forward) direction.z -= 1;
+    if (move.backward) direction.z += 1;
+    if (move.left) direction.x -= 1;
+    if (move.right) direction.x += 1;
+    direction.normalize();
+    direction.applyQuaternion(camera.quaternion);
+    controls.moveRight(direction.x * speed);
+    controls.moveForward(direction.z * speed);
+
+    renderer.render(scene, camera);
+}
