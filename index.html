@@ -27,7 +27,6 @@
 
     let scene, camera, renderer;
     let keys = {};
-    let velocity = new THREE.Vector3();
     let direction = new THREE.Vector3();
     let raycaster = new THREE.Raycaster();
     let enemyCubes = [];
@@ -48,7 +47,7 @@
 
     let pitchObject = new THREE.Object3D();
     let yawObject = new THREE.Object3D();
-    
+
     const onMouseMove = (event) => {
       const movementX = event.movementX || 0;
       const movementY = event.movementY || 0;
@@ -68,12 +67,14 @@
 
     const init = () => {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      scene.background = new THREE.Color(0x202020);
 
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       pitchObject.add(camera);
-      yawObject.position.y = 2;
+      yawObject.position.set(0, 2, 5);
       yawObject.add(pitchObject);
       scene.add(yawObject);
+      camera.lookAt(0, 0, 0);
 
       renderer = new THREE.WebGLRenderer();
       renderer.setSize(window.innerWidth, window.innerHeight);
