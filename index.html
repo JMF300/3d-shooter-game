@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Krunker-Style FPS (Single Player)</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    canvas { display: block; }
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      background: white;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <div id="crosshair"></div>
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three';
+
+    let scene, camera, renderer;
+    let keys = {};
+    let velocity = new THREE.Vector3();
+    let direction = new THREE.Vector3();
+    let raycaster = new THREE.Raycaster();
+    let enemyCubes = [];
+
+    const pointerLock = () => {
+      document.body.addEventListener('click', () => {
+        document.body.requestPointerLock();
+      });
+
+      document.addEventListener('pointerlockchange', () => {
+        if (document.pointerLockElement === document.body) {
+          document.addEventListener('mousemove', onMouseMove);
+        } else {
+          document.removeEventListener('mousemove', onMouseMove);
+        }
+      });
+    };
+
+    let pitchObject = new THREE.Object3D();
+    let yawObject = new THREE.Object3D();
+    
+    const onMouseMove = (event) => {
+      const movementX = event.movementX || 0;
+      const movementY = event.movementY || 0;
+      yawObject.rotation.y -= movementX * 0.002;
+      pitchObject.rotation.x -= movementY * 0.002;
+      pitchObject.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchObject.rotation.x));
+    };
+
+    const shoot = () => {
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const intersects = raycaster.intersectObjects(enemyCubes);
+      if (intersects.length > 0) {
+        scene.remove(intersects[0].object);
+        enemyCubes = enemyCubes.filter(obj => obj !== intersects[0].object);
+      }
+    };
+
+    const init = () => {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+      pitchObject.add(camera);
+      yawObject.position.y = 2;
+      yawObject.add(pitchObject);
+      scene.add(yawObject);
+
+      renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const floorGeometry = new THREE.PlaneGeometry(100, 100);
+      const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x444444 });
+      const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+      floor.rotation.x = -Math.PI / 2;
+      scene.add(floor);
+
+      for (let i = 0; i < 5; i++) {
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(1, 1, 1),
+          new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        cube.position.set(Math.random() * 20 - 10, 0.5, Math.random() * 20 - 10);
+        scene.add(cube);
+        enemyCubes.push(cube);
+      }
+
+      pointerLock();
+
+      document.addEventListener('keydown', e => keys[e.code] = true);
+      document.addEventListener('keyup', e => keys[e.code] = false);
+      document.addEventListener('mousedown', shoot);
+
+      animate();
+    };
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+
+      direction.z = Number(keys['KeyW']) - Number(keys['KeyS']);
+      direction.x = Number(keys['KeyD']) - Number(keys['KeyA']);
+      direction.normalize();
+
+      if (direction.length() > 0) {
+        const moveSpeed = 0.1;
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(yawObject.quaternion);
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(yawObject.quaternion);
+        yawObject.position.add(forward.multiplyScalar(direction.z * moveSpeed));
+        yawObject.position.add(right.multiplyScalar(direction.x * moveSpeed));
+      }
+
+      renderer.render(scene, camera);
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    init();
+  </script>
+</body>
+</html>
